@@ -163,12 +163,736 @@
 </nav>
 
         <div id="main" >
-            <div class ="post_page_title_img" style="height: 25rem;background-image: url(https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/1.jpg);background-position: center; background-repeat:no-repeat; background-size:cover;-moz-background-size:cover;overflow:hidden;" >
+            <div class ="post_page_title_img" style="height: 25rem;background-image: url(https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/cover/c3.jpg);background-position: center; background-repeat:no-repeat; background-size:cover;-moz-background-size:cover;overflow:hidden;" >
                 <a href="#" style="padding: 4rem 4rem 2rem 4rem ;"><h2 >FPGA图像处理-图像双线性插值放大</h2></a>
             </div>
             <!-- Post -->
             <div class="typo" style="padding: 3rem;">
-                
+                <h1 id="设计目标"><a href="#设计目标" class="headerlink" title="设计目标"></a>设计目标</h1><ul>
+<li>使用双线性插值方法将图像放大两倍；</li>
+<li>图像输入为360*640，输入输出包含行、场同步信号。</li>
+</ul>
+<h1 id="设计方案"><a href="#设计方案" class="headerlink" title="设计方案"></a>设计方案</h1><p>将像素点的插值分为两个步骤：先对行方向插值，再对列方向插值。即先将图像插值得到$360<em>1280$，再插值到$720</em>1280$</p>
+<p>在行方向的插值中，设插值后的图像像素点的坐标为y，则需要用到的原图中的坐标为$(y+0.5)&#x2F;2$向上和向下取整。例如坐标$y&#x3D;3，(3+0.5)&#x2F;2&#x3D;1.75$，那么用到的便是原图中y坐标为1和2的点，权重分别为(2-1.75)和(1.75-1)。通过下表坐标与系数的观察可以发现，除了第一个特殊位置外，其余系数均可以通过坐标奇偶性判断，即判断坐标寄存器最低位。列方向插值原理相同。</p>
+<table>
+<thead>
+<tr>
+<th>插值后坐标</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>用到原图坐标</td>
+<td>1</td>
+<td>1和2</td>
+<td>1和2</td>
+<td>2和3</td>
+<td>2和3</td>
+<td>3和4</td>
+<td>3和4</td>
+</tr>
+<tr>
+<td>系数</td>
+<td>1</td>
+<td>0.75,0.25</td>
+<td>0.25,0.75</td>
+<td>0.75,0.25</td>
+<td>0.25,0.75</td>
+<td>0.75,0.25</td>
+<td>0.25,0.75</td>
+</tr>
+</tbody></table>
+<p>在从内存中读取图像时，每一行图像结束后需要暂停640+1280个周期，在读取行像素和暂停时间的前640个周期中，完成行方向的插值，在读取行像素和暂停时间的前640+1280个周期中使用两行图像完成列方向的插值。</p>
+<p>系统原理图如图所示，包含row_buf、row_interplation、col_buf和col_interplation四个基本模块。<br><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/schematic.jpg"/></p>
+<h1 id="各模块设计"><a href="#各模块设计" class="headerlink" title="各模块设计"></a>各模块设计</h1><h2 id="row-buf模块："><a href="#row-buf模块：" class="headerlink" title="row_buf模块："></a>row_buf模块：</h2><p>输入图像根据一个宽度计数器产生地址，通过写端口存入行缓存ram中。进入每行后的暂停时间时，ram暂停写入。<br>用到的ram配置为：真双端口，深度640，数据宽度8bit，无输出寄存器。Port a用于缓存的数据写入，port b用于读出缓存数据。</p>
+<pre class="line-numbers language-lang-verilog" data-language="lang-verilog"><code class="language-lang-verilog">
+module row_buf(
+    input clk,
+    input rst_n,
+    input [7:0] data_in,
+	input in_data_en,
+	input [9:0] width,
+	
+	input [9:0] rd_row_addr,
+	output [7:0] row_pexil_out
+    );
+    &#x2F;&#x2F;输入延迟一个周期
+    reg [7:0] data_in_r1;
+    &#x2F;&#x2F; reg [9:0] rd_row_addr_r1;
+    always@(posedge clk or negedge rst_n)
+    begin
+        if(~rst_n)
+        begin
+            data_in_r1 &lt;&#x3D; 0;
+            &#x2F;&#x2F; rd_row_addr_r1 &lt;&#x3D; 0;
+        end
+        else
+        begin
+            data_in_r1 &lt;&#x3D; data_in;
+            &#x2F;&#x2F; rd_row_addr_r1 &lt;&#x3D; rd_row_addr;
+        end
+    end
+
+
+    reg [9:0] wr_row_addr;
+    always@(posedge clk or negedge rst_n)
+    begin
+        if(~rst_n)
+            wr_row_addr &lt;&#x3D; 0;
+        else
+        begin
+            if(in_data_en)
+            begin
+                if(wr_row_addr &lt; (width - 1))
+                     wr_row_addr &lt;&#x3D; wr_row_addr + 1;
+                else                  
+                    wr_row_addr &lt;&#x3D; 0;
+            end      
+            else
+                wr_row_addr &lt;&#x3D; wr_row_addr;
+        end
+    end
+    &#x2F;&#x2F;写地址延迟一个周期
+    reg [9:0] wr_row_addr_r1,
+              wr_row_addr_r2;
+    always@(posedge clk or negedge rst_n)
+    begin
+        if(~rst_n)
+        begin
+            wr_row_addr_r1 &lt;&#x3D; 0;
+            wr_row_addr_r2 &lt;&#x3D; 0;
+        end
+        else
+        begin
+            wr_row_addr_r1 &lt;&#x3D; wr_row_addr;
+            wr_row_addr_r2 &lt;&#x3D; wr_row_addr_r1;
+        end
+    end
+    wire [9:0] rd_row_addr_r1;
+    assign rd_row_addr_r1 &#x3D; rd_row_addr &lt;&#x3D; (width - 1) ?  rd_row_addr : 10&#39;dz;
+
+    &#x2F;&#x2F;portA: wirte date, portB: read data
+   row_ram_640x8bit row_ram_640x8bit_init (
+  .clka(clk),    &#x2F;&#x2F; input wire clka
+  .ena(1),      &#x2F;&#x2F; input wire ena
+  .wea(1),      &#x2F;&#x2F; input wire [0 : 0] wea
+  .addra(wr_row_addr_r1),  &#x2F;&#x2F; input wire [9 : 0] addra
+  .dina(data_in_r1),    &#x2F;&#x2F; input wire [7 : 0] dina
+&#x2F;&#x2F;  .douta(douta),  &#x2F;&#x2F; output wire [7 : 0] douta
+  .clkb(clk),    &#x2F;&#x2F; input wire clkb
+  .enb(1),      &#x2F;&#x2F; input wire enb
+  .web(0),      &#x2F;&#x2F; input wire [0 : 0] web
+  .addrb(rd_row_addr_r1),  &#x2F;&#x2F; input wire [9 : 0] addrb
+&#x2F;&#x2F;  .dinb(dinb),    &#x2F;&#x2F; input wire [7 : 0] dinb
+  .doutb(row_pexil_out)  &#x2F;&#x2F; output wire [7 : 0] doutb
+);
+    
+endmodule
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="row-interplation模块："><a href="#row-interplation模块：" class="headerlink" title="row_interplation模块："></a>row_interplation模块：</h2><p>根据插值后图像中的宽度寄存器生成读行缓存ram地址，根据寄存器数据的奇偶性判断插值权重。对于插值权重系数为0.75的像素，计算公式如下，等价于pixel*3后再除以4，同时对结果四舍五入。<br>$$<br>((pixel &lt;&lt; 1) + pixel + 2)&gt;&gt;2<br>$$<br>对于插值系数为0.25的像素，计算公式如下：<br>$$<br>(pixel + 2)&gt;&gt;2<br>$$</p>
+<pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
+<span class="token keyword">module</span> <span class="token function">row_interplation</span><span class="token punctuation">(</span>
+    <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> rst_n<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> in_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> width<span class="token punctuation">,</span>
+    
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> rd_row_addr<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_cnt<span class="token punctuation">,</span>
+    
+    <span class="token comment">//</span>
+    <span class="token keyword">output</span> o_data_en_r_o<span class="token punctuation">,</span>
+    <span class="token comment">//</span>
+    <span class="token keyword">output</span> o_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> rowx2<span class="token punctuation">;</span> <span class="token comment">//resie后的宽度</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> rowx2_cnt<span class="token punctuation">;</span><span class="token comment">//计数器</span>
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        rowx2 <span class="token operator">=</span> width <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            rowx2_cnt <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt <span class="token operator">&lt;</span> width<span class="token punctuation">)</span>
+            <span class="token keyword">begin</span>
+                <span class="token function">if</span><span class="token punctuation">(</span>in_data_en<span class="token punctuation">)</span>
+                    rowx2_cnt <span class="token operator">&lt;=</span> rowx2_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+                 <span class="token keyword">else</span>
+                    rowx2_cnt <span class="token operator">&lt;=</span> rowx2_cnt<span class="token punctuation">;</span>
+            <span class="token keyword">end</span>
+            <span class="token keyword">else</span>
+            <span class="token keyword">begin</span>
+                <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt <span class="token operator">&lt;</span> rowx2<span class="token punctuation">)</span>
+                    rowx2_cnt <span class="token operator">&lt;=</span> rowx2_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+                 <span class="token keyword">else</span>
+                    rowx2_cnt <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+            <span class="token keyword">end</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out1<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out2<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+        <span class="token keyword">begin</span>
+            row_pexil_out1 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            row_pexil_out2 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            row_pexil_out1 <span class="token operator">&lt;=</span> row_pexil_out<span class="token punctuation">;</span>
+            row_pexil_out2 <span class="token operator">&lt;=</span> row_pexil_out1<span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    <span class="token comment">//cnt delay 4T</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> rowx2_cnt1<span class="token punctuation">,</span>
+               rowx2_cnt2<span class="token punctuation">,</span>
+               rowx2_cnt3<span class="token punctuation">,</span>
+               rowx2_cnt4<span class="token punctuation">,</span>
+               rowx2_cnt5<span class="token punctuation">;</span>
+               
+   <span class="token keyword">assign</span> row_cnt <span class="token operator">=</span> rowx2_cnt5<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+        <span class="token keyword">begin</span>
+            rowx2_cnt1 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            rowx2_cnt2 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            rowx2_cnt1 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            rowx2_cnt4 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            rowx2_cnt5 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            rowx2_cnt1 <span class="token operator">&lt;=</span> rowx2_cnt<span class="token punctuation">;</span>
+            rowx2_cnt2 <span class="token operator">&lt;=</span> rowx2_cnt1<span class="token punctuation">;</span>
+            rowx2_cnt3 <span class="token operator">&lt;=</span> rowx2_cnt2<span class="token punctuation">;</span>
+            rowx2_cnt4 <span class="token operator">&lt;=</span> rowx2_cnt3<span class="token punctuation">;</span>
+            rowx2_cnt5 <span class="token operator">&lt;=</span> rowx2_cnt4<span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    
+    <span class="token comment">//interplation</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out2_10bit<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out_10bit<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data_r<span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> row_pexil_out2_10bit <span class="token operator">=</span> <span class="token operator">&#123;</span><span class="token number">2'b0</span><span class="token punctuation">,</span>row_pexil_out2<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> row_pexil_out_10bit <span class="token operator">=</span> rowx2_cnt5 <span class="token operator">==</span> <span class="token number">1279</span><span class="token operator">?</span> <span class="token operator">&#123;</span><span class="token number">2'b0</span><span class="token punctuation">,</span>row_pexil_out1<span class="token operator">&#125;</span> <span class="token punctuation">:</span> <span class="token operator">&#123;</span><span class="token number">2'b0</span><span class="token punctuation">,</span>row_pexil_out<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            row_inter_data_r <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt5 <span class="token operator">&lt;=</span> width<span class="token punctuation">)</span>
+            <span class="token keyword">begin</span>
+                <span class="token comment">// if(in_data_en)</span>
+                <span class="token comment">// begin</span>
+                    <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt5 <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+                        row_inter_data_r <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span><span class="token number">2'b0</span><span class="token punctuation">,</span>row_pexil_out<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+                    <span class="token keyword">else</span>
+                    <span class="token keyword">begin</span>
+                        <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt5<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token comment">//0.75 0.25</span>
+                            <span class="token comment">// row_inter_data &lt;= ((row_pexil_out2 + 1) >> 2)*3 + ((row_pexil_out + 1) >> 2);</span>
+                            row_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out2_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> row_pexil_out2_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                         <span class="token keyword">else</span><span class="token comment">//0.25 0.75</span>
+                            <span class="token comment">// row_inter_data &lt;= ((row_pexil_out2 + 1) >> 2) + ((row_pexil_out + 1) >> 2)*3;</span>
+                            row_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out2_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> row_pexil_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                    <span class="token keyword">end</span>
+                <span class="token comment">// end</span>
+                <span class="token comment">// else;</span>
+            <span class="token keyword">end</span>
+            <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt5 <span class="token operator">==</span> <span class="token number">1280</span><span class="token punctuation">)</span>
+                    row_inter_data_r <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span><span class="token number">2'b0</span><span class="token punctuation">,</span>row_pexil_out2_10bit<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+            <span class="token keyword">else</span>
+            <span class="token keyword">begin</span>
+                <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt5<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token comment">//0.75 0.25</span>
+                    <span class="token comment">// row_inter_data &lt;= ((row_pexil_out2 + 1) >> 2)*3 + ((row_pexil_out + 1) >> 2);</span>
+                    row_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out2_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> row_pexil_out2_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">else</span><span class="token comment">//0.25 0.75</span>
+                    <span class="token comment">// row_inter_data &lt;= ((row_pexil_out2 + 1) >> 2) + ((row_pexil_out + 1) >> 2)*3;</span>
+                    row_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out2_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>row_pexil_out_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> row_pexil_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token keyword">end</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> row_inter_data <span class="token operator">=</span> row_inter_data_r<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token comment">// assign rd_row_addr = rowx2_cnt1 == 1? 10'd0 : (rowx2_cnt1 >> 1) - 1;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            rd_row_addr <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            rd_row_addr <span class="token operator">&lt;=</span> rowx2_cnt1 <span class="token operator">==</span> <span class="token number">1280</span> <span class="token operator">?</span> <span class="token number">10'd639</span> <span class="token punctuation">:</span><span class="token punctuation">(</span>rowx2_cnt1 <span class="token operator">==</span> <span class="token number">1</span><span class="token operator">?</span> <span class="token number">10'd0</span> <span class="token punctuation">:</span> <span class="token punctuation">(</span>rowx2_cnt1 <span class="token operator">>></span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+
+    <span class="token comment">//输出要延迟周期</span>
+    <span class="token keyword">reg</span> o_data_en_r<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token comment">// always@(*)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_data_en_r <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>in_data_en <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+            o_data_en_r <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>rowx2_cnt <span class="token operator">></span> <span class="token number">639</span> <span class="token operator">&amp;&amp;</span> rowx2_cnt1 <span class="token operator">&lt;=</span> <span class="token number">1280</span><span class="token punctuation">)</span>
+            o_data_en_r <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            o_data_en_r <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> o_data_en_r_o <span class="token operator">=</span> o_data_en_r<span class="token punctuation">;</span>
+<span class="token keyword">endmodule</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="col-buf模块："><a href="#col-buf模块：" class="headerlink" title="col_buf模块："></a>col_buf模块：</h2><p>模块中使用了两个深度为1280的移位寄存器，用于缓存行插值模块输出的插值结果。在从内存中读取一行图像和之后暂停的前640个周期中，两个寄存器构成级联的移位寄存器，输出插值所用的像素值并完成一行图像的插值。由于相邻两行插值中用到的图像行坐标相同，因此在暂停时间的后1280个周期中，将两个缓存寄存器自身循环移位。如图所示。</p>
+<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/col缓存.png"/>
+
+<pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
+<span class="token keyword">module</span> <span class="token function">col_buf</span><span class="token punctuation">(</span>
+    <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> rst_n<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> in_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf1_data_out<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf2_data_out<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token keyword">reg</span> o_data_en    
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">parameter</span> reg_size <span class="token operator">=</span> <span class="token number">8</span><span class="token operator">*</span><span class="token number">1280</span><span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> shift_buf1<span class="token punctuation">,</span><span class="token comment">//级联的移位寄存器，当data_en = 0时，每个寄存器自身循环移位</span>
+                         shift_buf2<span class="token punctuation">;</span>
+                        <span class="token comment">//  shift_buf3;</span>
+
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+        <span class="token keyword">begin</span>
+            shift_buf1 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            shift_buf2 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>in_data_en<span class="token punctuation">)</span>
+            <span class="token keyword">begin</span>
+                shift_buf1 <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span>shift_buf1<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">8</span> <span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>row_inter_data<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+                shift_buf2 <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span>shift_buf2<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">8</span> <span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>shift_buf1<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">1</span> <span class="token punctuation">:</span> reg_size <span class="token operator">-</span> <span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">&#125;</span><span class="token punctuation">;</span>
+            <span class="token keyword">end</span>
+            <span class="token keyword">else</span>
+            <span class="token keyword">begin</span>
+                shift_buf1 <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span>shift_buf1<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">8</span> <span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>shift_buf1<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">1</span> <span class="token punctuation">:</span> reg_size <span class="token operator">-</span> <span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">&#125;</span><span class="token punctuation">;</span>
+                shift_buf2 <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span>shift_buf2<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">8</span> <span class="token operator">-</span><span class="token number">1</span> <span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>shift_buf2<span class="token punctuation">[</span>reg_size <span class="token operator">-</span> <span class="token number">1</span> <span class="token punctuation">:</span> reg_size <span class="token operator">-</span> <span class="token number">8</span><span class="token punctuation">]</span><span class="token operator">&#125;</span><span class="token punctuation">;</span>
+            <span class="token keyword">end</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> buf1_data_out <span class="token operator">=</span> shift_buf1<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> buf2_data_out <span class="token operator">=</span> shift_buf2<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_data_en <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> 
+            o_data_en <span class="token operator">&lt;=</span> in_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+<span class="token keyword">endmodule</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="col-interplation模块："><a href="#col-interplation模块：" class="headerlink" title="col_interplation模块："></a>col_interplation模块：</h2><p>插值计算方式与行插值模块相同。</p>
+<pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
+<span class="token keyword">module</span> <span class="token function">col_interplation</span><span class="token punctuation">(</span>
+    <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> rst_n<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> in_data_en<span class="token punctuation">,</span>
+    
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_cnt<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf1_data_out<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf2_data_out<span class="token punctuation">,</span>
+    
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> col_inter_data<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token keyword">reg</span> o_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> o_V_SYNC<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token keyword">reg</span> o_H_SYNC
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> cnt<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> col_cnt1<span class="token punctuation">,</span>
+              col_cnt2<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> col_cnt<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> col_cnt_flip<span class="token punctuation">;</span>
+
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> in_data_en <span class="token keyword">or</span> <span class="token keyword">negedge</span> in_data_en <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            cnt <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>in_data_en<span class="token punctuation">)</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>cnt <span class="token operator">==</span> <span class="token number">721</span><span class="token punctuation">)</span>
+                cnt <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            <span class="token keyword">else</span>
+                cnt <span class="token operator">&lt;=</span> cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>cnt <span class="token operator">==</span> <span class="token number">720</span><span class="token punctuation">)</span>
+                cnt <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            <span class="token keyword">else</span>
+                cnt <span class="token operator">&lt;=</span> cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            col_cnt_flip <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>col_cnt_flip <span class="token operator">==</span> <span class="token number">1280</span><span class="token punctuation">)</span>
+            col_cnt_flip <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>in_data_en <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+            col_cnt_flip <span class="token operator">&lt;=</span> col_cnt_flip <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            col_cnt_flip <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            col_cnt <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>row_cnt <span class="token operator">==</span> <span class="token number">1280</span> <span class="token operator">||</span> col_cnt_flip <span class="token operator">==</span> <span class="token number">1279</span><span class="token punctuation">)</span>
+            col_cnt <span class="token operator">&lt;=</span> col_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>col_cnt <span class="token operator">==</span> <span class="token number">720</span> <span class="token operator">&amp;&amp;</span> col_cnt_flip <span class="token operator">==</span> <span class="token number">1280</span><span class="token punctuation">)</span>
+            col_cnt <span class="token operator">&lt;=</span> col_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span> 
+
+    <span class="token comment">//col_cnt延迟3个周期</span>
+    
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+        <span class="token keyword">begin</span>
+            col_cnt1 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+            col_cnt2 <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            col_cnt1 <span class="token operator">&lt;=</span> col_cnt<span class="token punctuation">;</span>
+            col_cnt2 <span class="token operator">&lt;=</span> col_cnt1<span class="token punctuation">;</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    <span class="token comment">//插值计算</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf1_data_out_10bit<span class="token punctuation">,</span>
+               buf2_data_out_10bit<span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> buf1_data_out_10bit <span class="token operator">=</span> <span class="token operator">&#123;</span><span class="token number">2'b00</span><span class="token punctuation">,</span>buf1_data_out<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> buf2_data_out_10bit <span class="token operator">=</span> <span class="token operator">&#123;</span><span class="token number">2'b00</span><span class="token punctuation">,</span>buf2_data_out<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> col_inter_data_r<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            col_inter_data_r <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+        <span class="token keyword">begin</span>
+            <span class="token function">if</span><span class="token punctuation">(</span>col_cnt2 <span class="token operator">==</span> <span class="token punctuation">(</span><span class="token number">1</span> <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> cnt <span class="token operator">!=</span> <span class="token number">3</span><span class="token punctuation">)</span><span class="token comment">//有1行的延迟</span>
+                col_inter_data_r <span class="token operator">&lt;=</span> buf1_data_out_10bit<span class="token punctuation">;</span>
+            <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>col_cnt2 <span class="token operator">==</span> <span class="token punctuation">(</span><span class="token number">720</span> <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+                col_inter_data_r <span class="token operator">&lt;=</span> buf1_data_out_10bit<span class="token punctuation">;</span>
+            <span class="token keyword">else</span>
+            <span class="token keyword">begin</span>
+                <span class="token function">if</span><span class="token punctuation">(</span>cnt<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+                <span class="token keyword">begin</span>
+                    col_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>buf2_data_out_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span>buf2_data_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>buf1_data_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+                <span class="token keyword">end</span>
+                <span class="token keyword">else</span>
+                <span class="token keyword">begin</span>
+                    col_inter_data_r <span class="token operator">&lt;=</span> <span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">(</span>buf1_data_out_10bit <span class="token operator">&lt;&lt;</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span>buf1_data_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>buf2_data_out_10bit <span class="token operator">+</span> <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">>></span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">end</span>
+            <span class="token keyword">end</span>
+        <span class="token keyword">end</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> col_inter_data <span class="token operator">=</span> col_inter_data_r<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token comment">//同步信号产生</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_data_en <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>col_cnt2 <span class="token operator">>=</span> <span class="token number">2</span> <span class="token operator">&amp;&amp;</span> col_cnt1 <span class="token operator">&lt;=</span> <span class="token number">721</span><span class="token punctuation">)</span>
+            o_data_en <span class="token operator">&lt;=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            o_data_en <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+
+    <span class="token comment">//in_data_en 延迟一个周期</span>
+    <span class="token keyword">reg</span> in_data_en_r<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            in_data_en_r <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            in_data_en_r <span class="token operator">&lt;=</span> in_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> o_H_SYNC_W <span class="token operator">=</span> in_data_en_r <span class="token operator">^</span> in_data_en<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_H_SYNC <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            o_H_SYNC <span class="token operator">&lt;=</span> o_H_SYNC_W<span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+    <span class="token comment">//o_data_en 延迟一个周期</span>
+    <span class="token keyword">reg</span> o_data_en_r<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_data_en_r <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            o_data_en_r <span class="token operator">&lt;=</span> o_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> o_V_SYNC <span class="token operator">=</span> o_data_en_r <span class="token operator">^</span> o_data_en<span class="token punctuation">;</span>
+
+<span class="token keyword">endmodule</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="顶层模块"><a href="#顶层模块" class="headerlink" title="顶层模块"></a>顶层模块</h2><pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
+<span class="token keyword">module</span> <span class="token function">resize_bilinear_top</span><span class="token punctuation">(</span>
+    <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> rst_n<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> in_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> data_in<span class="token punctuation">,</span>
+    
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> width_in<span class="token punctuation">,</span>
+    <span class="token keyword">input</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> height_in<span class="token punctuation">,</span>
+    
+    
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> data_out<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> o_data_en<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> o_H_SYNC<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> o_V_SYNC<span class="token punctuation">,</span>
+
+    <span class="token comment">//test port</span>
+    <span class="token keyword">output</span> row_data_en_o<span class="token punctuation">,</span>
+    <span class="token keyword">output</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data_o
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> rd_row_addr<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_pexil_out<span class="token punctuation">;</span>
+    row_buf <span class="token function">row_buf_init</span><span class="token punctuation">(</span>
+        <span class="token punctuation">.</span><span class="token function">clk</span><span class="token punctuation">(</span>clk<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rst_n</span><span class="token punctuation">(</span>rst_n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">data_in</span><span class="token punctuation">(</span>data_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">in_data_en</span><span class="token punctuation">(</span>in_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">width</span><span class="token punctuation">(</span>width_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rd_row_addr</span><span class="token punctuation">(</span>rd_row_addr<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">row_pexil_out</span><span class="token punctuation">(</span>row_pexil_out<span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">10</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_cnt<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> row_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> o_data_en_r<span class="token punctuation">;</span>
+    row_interplation <span class="token function">row_interplation_init</span><span class="token punctuation">(</span>
+        <span class="token punctuation">.</span><span class="token function">clk</span><span class="token punctuation">(</span>clk<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rst_n</span><span class="token punctuation">(</span>rst_n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">in_data_en</span><span class="token punctuation">(</span>in_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">width</span><span class="token punctuation">(</span>width_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rd_row_addr</span><span class="token punctuation">(</span>rd_row_addr<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">row_pexil_out</span><span class="token punctuation">(</span>row_pexil_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token comment">// .o_data_en(row_data_en),</span>
+        <span class="token punctuation">.</span><span class="token function">row_inter_data</span><span class="token punctuation">(</span>row_inter_data<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">row_cnt</span><span class="token punctuation">(</span>row_cnt<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_data_en_r_o</span><span class="token punctuation">(</span>o_data_en_r<span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">5</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> o_data_en_shift<span class="token punctuation">;</span>
+    <span class="token important">always@</span><span class="token punctuation">(</span><span class="token keyword">posedge</span> clk <span class="token keyword">or</span> <span class="token keyword">negedge</span> rst_n<span class="token punctuation">)</span>
+    <span class="token keyword">begin</span>
+        <span class="token function">if</span><span class="token punctuation">(</span><span class="token operator">~</span>rst_n<span class="token punctuation">)</span>
+            o_data_en_shift <span class="token operator">&lt;=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            o_data_en_shift <span class="token operator">&lt;=</span> <span class="token operator">&#123;</span>o_data_en_shift<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span>o_data_en_r<span class="token operator">&#125;</span><span class="token punctuation">;</span>
+    <span class="token keyword">end</span>
+    <span class="token keyword">assign</span> row_data_en <span class="token operator">=</span> o_data_en_shift<span class="token punctuation">[</span><span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+
+
+    <span class="token comment">//test port</span>
+    <span class="token keyword">assign</span> row_inter_data_o <span class="token operator">=</span> row_inter_data<span class="token punctuation">;</span>
+    <span class="token keyword">assign</span> row_data_en_o <span class="token operator">=</span> row_data_en<span class="token punctuation">;</span>
+    
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span>col_cnt<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf1_data_out<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> buf2_data_out<span class="token punctuation">;</span>
+    <span class="token comment">// wire [7:0] buf3_data_out;</span>
+    <span class="token keyword">wire</span> colbuf_data_en<span class="token punctuation">;</span>
+    col_buf <span class="token function">col_buf_init</span><span class="token punctuation">(</span>
+        <span class="token punctuation">.</span><span class="token function">clk</span><span class="token punctuation">(</span>clk<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rst_n</span><span class="token punctuation">(</span>rst_n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">in_data_en</span><span class="token punctuation">(</span>row_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">row_inter_data</span><span class="token punctuation">(</span>row_inter_data<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token comment">// .row_cnt(row_cnt),</span>
+        
+        <span class="token comment">// .col_cnt(col_cnt),</span>
+        <span class="token punctuation">.</span><span class="token function">buf1_data_out</span><span class="token punctuation">(</span>buf1_data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">buf2_data_out</span><span class="token punctuation">(</span>buf2_data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token comment">// .buf3_data_out(buf3_data_out),</span>
+        <span class="token punctuation">.</span><span class="token function">o_data_en</span><span class="token punctuation">(</span>colbuf_data_en<span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    
+    col_interplation <span class="token function">col_interplation_inti</span><span class="token punctuation">(</span>
+        <span class="token punctuation">.</span><span class="token function">clk</span><span class="token punctuation">(</span>clk<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rst_n</span><span class="token punctuation">(</span>rst_n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">in_data_en</span><span class="token punctuation">(</span>colbuf_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">row_cnt</span><span class="token punctuation">(</span>row_cnt<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">buf1_data_out</span><span class="token punctuation">(</span>buf1_data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">buf2_data_out</span><span class="token punctuation">(</span>buf2_data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token comment">// .buf3_data_out(buf3_data_out),</span>
+        <span class="token punctuation">.</span><span class="token function">col_inter_data</span><span class="token punctuation">(</span>data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_data_en</span><span class="token punctuation">(</span>o_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_H_SYNC</span><span class="token punctuation">(</span>o_H_SYNC<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_V_SYNC</span><span class="token punctuation">(</span>o_V_SYNC<span class="token punctuation">)</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">endmodule</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="仿真与结果"><a href="#仿真与结果" class="headerlink" title="仿真与结果"></a>仿真与结果</h1><p>将算法通过matlab实现，与matlab工具箱自带插值函数不同之处在于取整的方式。仿真结果与matlab工具箱函数的平均误差为0.3332，与算法的matlab版处理结果完全一致。</p>
+<center class="half">
+    <img src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/插值前.png"/><img src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/插值后.png" />
+</center>
+
+<pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog"><span class="token keyword">module</span> <span class="token function">tb_resize</span><span class="token punctuation">(</span>
+
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> clk<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> rst_n<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> in_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> data_in<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> in_H_SYNC<span class="token punctuation">;</span>
+	<span class="token keyword">reg</span> in_V_SYNC<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> width_in<span class="token punctuation">;</span>
+    <span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">9</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> height_in<span class="token punctuation">;</span>
+    
+    <span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> data_out<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> o_data_en<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> o_H_SYNC<span class="token punctuation">;</span>
+    <span class="token keyword">wire</span> o_V_SYNC<span class="token punctuation">;</span>
+
+	<span class="token comment">//test_port</span>
+	<span class="token keyword">wire</span> row_data_en_o<span class="token punctuation">;</span>
+	<span class="token keyword">wire</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> row_inter_data_o<span class="token punctuation">;</span>
+    resize_bilinear_top <span class="token function">resize_bilinear_top_init</span><span class="token punctuation">(</span>
+        <span class="token punctuation">.</span><span class="token function">clk</span><span class="token punctuation">(</span>clk<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">rst_n</span><span class="token punctuation">(</span>rst_n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">in_data_en</span><span class="token punctuation">(</span>in_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">data_in</span><span class="token punctuation">(</span>data_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        
+        <span class="token punctuation">.</span><span class="token function">width_in</span><span class="token punctuation">(</span>width_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">height_in</span><span class="token punctuation">(</span>height_in<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        
+        <span class="token punctuation">.</span><span class="token function">data_out</span><span class="token punctuation">(</span>data_out<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_data_en</span><span class="token punctuation">(</span>o_data_en<span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">.</span><span class="token function">o_H_SYNC</span><span class="token punctuation">(</span>o_H_SYNC<span class="token punctuation">)</span><span class="token punctuation">,</span> 
+        <span class="token punctuation">.</span><span class="token function">o_V_SYNC</span><span class="token punctuation">(</span>o_V_SYNC<span class="token punctuation">)</span><span class="token punctuation">,</span>
+
+		<span class="token comment">//test port</span>
+		<span class="token punctuation">.</span><span class="token function">row_data_en_o</span><span class="token punctuation">(</span>row_data_en_o<span class="token punctuation">)</span><span class="token punctuation">,</span>
+		<span class="token punctuation">.</span><span class="token function">row_inter_data_o</span><span class="token punctuation">(</span>row_inter_data_o<span class="token punctuation">)</span> 
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">parameter</span> period <span class="token operator">=</span> <span class="token number">200</span><span class="token punctuation">;</span>
+    <span class="token keyword">initial</span>
+	<span class="token keyword">begin</span>
+		clk <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+		rst_n <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		height_in <span class="token operator">=</span> <span class="token number">360</span><span class="token punctuation">;</span>
+		width_in <span class="token operator">=</span> <span class="token number">640</span><span class="token punctuation">;</span>
+		
+		#<span class="token punctuation">(</span>period<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		rst_n <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+	<span class="token keyword">end</span>
+    <span class="token comment">//?</span>
+	<span class="token keyword">reg</span> <span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">:</span><span class="token number">0</span><span class="token punctuation">]</span> temp8b<span class="token punctuation">;</span>
+	<span class="token keyword">integer</span> fd1<span class="token punctuation">;</span>
+	<span class="token keyword">integer</span> stop_flag<span class="token punctuation">;</span>
+	<span class="token keyword">integer</span> pixel_cnt<span class="token punctuation">;</span>
+	<span class="token keyword">integer</span> row_cnt<span class="token punctuation">;</span>
+	<span class="token keyword">initial</span>
+	<span class="token keyword">begin</span>
+		
+		in_H_SYNC <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		in_V_SYNC <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		in_data_en <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		stop_flag <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		pixel_cnt <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		row_cnt <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		fd1 <span class="token operator">=</span> <span class="token kernel-function property">$fopen</span><span class="token punctuation">(</span><span class="token string">"E:/my_verilog/resize_bilinear/prev_t.bin"</span><span class="token punctuation">,</span> <span class="token string">"rb"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+		#<span class="token punctuation">(</span>period<span class="token operator">*</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		in_data_en <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+		<span class="token function">while</span><span class="token punctuation">(</span>pixel_cnt <span class="token operator">&lt;</span> <span class="token number">230400</span><span class="token punctuation">)</span>
+		<span class="token keyword">begin</span>
+			<span class="token kernel-function property">$fread</span><span class="token punctuation">(</span>temp8b<span class="token punctuation">,</span> fd1<span class="token punctuation">,</span> <span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			data_in <span class="token operator">=</span> temp8b<span class="token punctuation">;</span>
+			pixel_cnt <span class="token operator">=</span> pixel_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+			
+			<span class="token function">if</span><span class="token punctuation">(</span>row_cnt <span class="token operator">==</span> <span class="token number">640</span><span class="token punctuation">)</span>
+			<span class="token keyword">begin</span>
+				row_cnt <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+				in_data_en <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+				#<span class="token punctuation">(</span>period<span class="token operator">*</span><span class="token punctuation">(</span><span class="token number">640</span> <span class="token operator">+</span> <span class="token number">1280</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				in_data_en <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+			<span class="token keyword">end</span>
+			<span class="token keyword">else</span>
+				row_cnt <span class="token operator">=</span> row_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+			#<span class="token punctuation">(</span>period<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">end</span>
+		in_data_en <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+		<span class="token kernel-function property">$fclose</span><span class="token punctuation">(</span>fd1<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		stop_flag <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+		pixel_cnt <span class="token operator">=</span> pixel_cnt <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+		#<span class="token punctuation">(</span>period<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">end</span>
+	
+	<span class="token comment">//保存行插值图片</span>
+	<span class="token keyword">integer</span> fds<span class="token punctuation">;</span>
+	<span class="token keyword">initial</span>
+	<span class="token keyword">begin</span>
+		fds <span class="token operator">=</span> <span class="token kernel-function property">$fopen</span><span class="token punctuation">(</span><span class="token string">"E:/my_verilog/resize_bilinear/resized.bin"</span><span class="token punctuation">,</span> <span class="token string">"wb"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+		<span class="token function">while</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span>
+		<span class="token keyword">begin</span>
+			<span class="token function">if</span><span class="token punctuation">(</span>o_data_en <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+			<span class="token keyword">begin</span>	
+				<span class="token kernel-function property">$fwrite</span><span class="token punctuation">(</span>fds<span class="token punctuation">,</span><span class="token string">"%02x"</span><span class="token punctuation">,</span>data_out<span class="token punctuation">)</span><span class="token punctuation">;</span>						
+			<span class="token keyword">end</span>
+			<span class="token keyword">else</span> <span class="token function">if</span><span class="token punctuation">(</span>o_data_en <span class="token operator">==</span> <span class="token number">0</span> <span class="token operator">&amp;&amp;</span> stop_flag <span class="token operator">==</span> <span class="token number">1</span><span class="token punctuation">)</span>
+				<span class="token keyword">begin</span>
+					<span class="token kernel-function property">$fclose</span><span class="token punctuation">(</span>fds<span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token kernel-function property">$stop</span><span class="token punctuation">;</span>
+				<span class="token keyword">end</span>
+			#<span class="token punctuation">(</span>period<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">end</span>
+	<span class="token keyword">end</span>
+	
+	<span class="token important">always</span>
+	<span class="token keyword">begin</span>
+		#<span class="token punctuation">(</span>period<span class="token operator">/</span><span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		clk <span class="token operator">=</span> <span class="token operator">~</span>clk<span class="token punctuation">;</span>
+	<span class="token keyword">end</span>
+<span class="token keyword">endmodule</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+
+
+
+
             </div>
 
             <!-- Post Comments -->
