@@ -168,7 +168,51 @@
             </div>
             <!-- Post -->
             <div class="typo" style="padding: 3rem;">
-                
+                <h2 id="代码链接"><a href="#代码链接" class="headerlink" title="代码链接"></a><a target="_blank" rel="noopener" href="https://github.com/nicyyyy/FPGA-CLAHE.git">代码链接</a></h2><h1 id="设计目标"><a href="#设计目标" class="headerlink" title="设计目标"></a>设计目标</h1><ul>
+<li>实现对比度受限的自适应直方图均衡化；</li>
+<li>图像输入为$720<em>1280$，或$640</em>480$；</li>
+<li>输入输出均为AXI-stream格式，且输入像素包含无效数据。</li>
+</ul>
+<h1 id="设计方案"><a href="#设计方案" class="headerlink" title="设计方案"></a>设计方案</h1><p>将整幅图片分割成4*4=16个block，每个block对应一块深度为256的ram存储区域。像素点逐个输入，使用一个行计数器和列计数器判断像素点坐标，用坐标判断像素点所属的block，并根据灰度值生成对应地址，并进行直方图统计。初步完成统计后，遍历存储区域进行直方图累加，在此过程中对灰度级最大值进行限制和重新分配。</p>
+<p>在直方图统计的过程中，同时对输入像素点进行均衡化操作。即对当前帧的像素使用上一帧的直方图计算结果进行映射，当前帧计算的直方图用于下一帧图像的均衡化。在连续的图像信号输入中，这样的做法避免了对图像进行缓存，转为缓存直方图统计结果，降低ram内存消耗。在均衡化的过程中，首先计算当前像素插值时用到的邻域block，生成对应的读地址，并且根据行列计数器的值计算出与邻域block中心点的距离，根据该距离计算插值时的各项权重。再根据权重和读地址数据计算插值后结果并输出。</p>
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical3_CLAHE/CLAHE_TOP.png"/></p>
+<h1 id="各模块设计"><a href="#各模块设计" class="headerlink" title="各模块设计"></a>各模块设计</h1><h2 id="ram-cntl模块"><a href="#ram-cntl模块" class="headerlink" title="ram_cntl模块"></a>ram_cntl模块</h2><p>该模块中实例化了各block区域对应的直方图存储ram，以及读写控制逻辑。由于直方图统计和均衡化同时进行，所以需要实例化32个256*16bit的双端口ram，保证前后两帧之间以及读写时序不会冲突。Ram的连接方式如下图：<br><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical3_CLAHE/ram_ctl.png"/><br>端口a用于读取直方图统计值，包含5组32选1的数据选择器。一组数据选择器输出连接到clipper模块，用于累加直方图计算CDF，其余四组数据选择器控制端接interpolation_ctl模块，输出端接equalizer模块，用于输出灰度值映射。</p>
+<p>端口b用于写入直方图统计值与统计值清零。清零控制信号和写block信号结果5-32译码器连接到每个ram的wr_en口。</p>
+<h2 id="histogram模块"><a href="#histogram模块" class="headerlink" title="histogram模块"></a>histogram模块</h2><p>该模块完成对每个block区域内的灰度直方图统计。首先将输入像素点缓存3个周期，依次进入pixel1、pixel2、pixel3、pixel4寄存器。从第一个像素点进入开始，行、列计数器启动，根据行、列坐标判断像素点对应的block区域。</p>
+<ul>
+<li>T1：读端口a地址为pixel1;</li>
+<li>T2：从端口a读入统计值，判断pixel2是否等于pixel3。若pixel2=pixel3，累加器加1，若pixel2不等于pixel3，或pixel2与pixel3不属于同一个block，累加器置1;</li>
+<li>T3：若pixel3不等于pixel4（即T2周期中的pixel2不等于pixel3），写端口b地址为pixel3，写数据为ram中读入的统计值+累加器。反之写地址和写block信号为高阻态。</li>
+</ul>
+<p>由于读入和写入数据时需要消耗一个周期，因此会出现当前写地址和读地址相同的情况，此时读入的数据为累加前的值，解决方法是将累加器的值延迟两个周期，当出现写端口地址和读端口地址相同时，下一个周期的累加器的初值会加上两个周期前应写入的累加器值，从而保证不会出现遗漏。</p>
+<h2 id="clipper模块"><a href="#clipper模块" class="headerlink" title="clipper模块"></a>clipper模块</h2><p>该模块完成CDF的计算。当完成当前帧的均衡化和直方图统计后，该模块启动。从端口a中依次读取统计好的灰度直方图并进行累加，在延迟一个周期后将累加的值依次从端口b写回ram。累加过程中，判断每个bin的统计值是否大于阈值，将超出于阈值的部分减去，并将超出部分加入excess累加器。累加完一个block后将excess值右移8位存入寄存器，用于直方图的重新分布。</p>
+<h2 id="interpolation-ctl模块"><a href="#interpolation-ctl模块" class="headerlink" title="interpolation_ctl模块"></a>interpolation_ctl模块</h2><p>该模块计算每个像素点灰度值对应的映射区域地址，并计算插值系数。CLAHE中各个block的插值系数由像素点到四个block的中心距离决定。以双线性插值为例，$s,r$为像素点与邻域中心竖直方向上的距离，$x,y$为像素点与邻域中心水平方向上的距离。</p>
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical3_CLAHE/双线性插值.jpg" width = 640, height = 312/></p>
+<p>令</p>
+<script type="math/tex; mode=display">
+\begin{align}
+u_1 &= \frac{s}{s+r}\\
+u_2 &= \frac{r}{s+r}\\
+v_1 &= \frac{y}{x+y}\\
+v_2 &= \frac{x}{x+y}
+\end{align}</script><p>则有</p>
+<script type="math/tex; mode=display">
+\begin{align}
+w_1 &= u_1v_1\\
+w_2 &= u_1v_2\\
+w_3 &= u_2v_1\\
+w_4 &= u_2v_2\notag
+\end{align}</script><p>在输入图像大小为720<em>1280时，每个block的大小为180</em>320，$u_1 u_2 v_1 v_2$的分子分母各用10bit的寄存器表示，将分子左移10bit后，使用20位移位除法器计算得到定点化后的$u_1 u_2 v_1 v_2$。</p>
+<p>在线性插值时，可以让邻域block1=block2，block3=block4，并且令水平或竖直方向的距离相等，这样线性插值的计算过程变为同双线性插值具有相同的形式。在不需要插值时，邻域block1=block2=block3=block4，且水平和竖直方向距离相等。这样可以简化逻辑。</p>
+<h2 id="equalizer模块"><a href="#equalizer模块" class="headerlink" title="equalizer模块"></a>equalizer模块</h2><p>由interpolation_ctl模块输出4个灰度值映射地址与权重后，该模块完成插值的计算。<br>首先根据CDF计算映射后的4个灰度值：</p>
+<script type="math/tex; mode=display">
+gray_i=\frac{(porta\_data\_out+(gray-1)excess_i)<<8}{57600}</script><p>式中，gray为当前像素的灰度值，加上(gray-1)excess_i后得到重新分布后的CDF，使用16位移位除法器计算每个block中的映射值。输出结果为四个block中的映射值加权，由于$u_1 u_2 v_1 v_2$在定点化中左移了10位，因此最终结果需要右移20位。</p>
+<script type="math/tex; mode=display">
+pixel\_out=(w_1 gray_1+w_2 gray_2+w_3 gray_3+w_4 gray_4 )≫20</script><h2 id="histogram-clear模块"><a href="#histogram-clear模块" class="headerlink" title="histogram_clear模块"></a>histogram_clear模块</h2><p>在计算完成当前帧的均衡化后，将储存上一帧CDF计算结果的ram清空。</p>
+<h2 id="initial-clear模块"><a href="#initial-clear模块" class="headerlink" title="initial_clear模块"></a>initial_clear模块</h2><p>在第一帧图像到来之前，将所有的ram清空。</p>
+<h1 id="结果与仿真"><a href="#结果与仿真" class="headerlink" title="结果与仿真"></a>结果与仿真</h1><p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical3_CLAHE/均衡化结果.png"/></p>
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical3_CLAHE/处理后图像.png"/></p>
+
             </div>
 
             <!-- Post Comments -->
