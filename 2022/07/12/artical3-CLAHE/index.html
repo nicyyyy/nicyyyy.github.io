@@ -170,7 +170,7 @@
             <div class="typo" style="padding: 3rem;">
                 <h2 id="代码链接"><a href="#代码链接" class="headerlink" title="代码链接"></a><a target="_blank" rel="noopener" href="https://github.com/nicyyyy/FPGA-CLAHE.git">代码链接</a></h2><h1 id="设计目标"><a href="#设计目标" class="headerlink" title="设计目标"></a>设计目标</h1><ul>
 <li>实现对比度受限的自适应直方图均衡化；</li>
-<li>图像输入为$720<em>1280$，或$640</em>480$；</li>
+<li>图像输入为720*1280，或640*480；</li>
 <li>输入输出均为AXI-stream格式，且输入像素包含无效数据。</li>
 </ul>
 <h1 id="设计方案"><a href="#设计方案" class="headerlink" title="设计方案"></a>设计方案</h1><p>将整幅图片分割成4*4=16个block，每个block对应一块深度为256的ram存储区域。像素点逐个输入，使用一个行计数器和列计数器判断像素点坐标，用坐标判断像素点所属的block，并根据灰度值生成对应地址，并进行直方图统计。初步完成统计后，遍历存储区域进行直方图累加，在此过程中对灰度级最大值进行限制和重新分配。</p>
