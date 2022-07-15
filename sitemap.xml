@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
-    <loc>http://example.com/2022/07/12/artical4-AXI2VGA/</loc>
+    <loc>https://nicyyy.gitee.io/2022/07/12/artical4-AXI2VGA/</loc>
     
     <lastmod>2022-07-15</lastmod>
     
@@ -11,7 +11,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/2022/07/12/artical3-CLAHE/</loc>
+    <loc>https://nicyyy.gitee.io/2022/07/12/artical3-CLAHE/</loc>
     
     <lastmod>2022-07-14</lastmod>
     
@@ -20,7 +20,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/about/index.html</loc>
+    <loc>https://nicyyy.gitee.io/about/index.html</loc>
     
     <lastmod>2022-07-12</lastmod>
     
@@ -29,7 +29,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/academy/index.html</loc>
+    <loc>https://nicyyy.gitee.io/academy/index.html</loc>
     
     <lastmod>2022-07-12</lastmod>
     
@@ -38,7 +38,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/2022/07/10/artical2_bilinear_inter/</loc>
+    <loc>https://nicyyy.gitee.io/2022/07/10/artical2_bilinear_inter/</loc>
     
     <lastmod>2022-07-12</lastmod>
     
@@ -47,7 +47,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/2022/07/10/artical1-FAST-Feature-detect/</loc>
+    <loc>https://nicyyy.gitee.io/2022/07/10/artical1-FAST-Feature-detect/</loc>
     
     <lastmod>2022-07-10</lastmod>
     
@@ -56,7 +56,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/publication/index.html</loc>
+    <loc>https://nicyyy.gitee.io/publication/index.html</loc>
     
     <lastmod>2022-07-07</lastmod>
     
@@ -65,7 +65,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/gallery/index.html</loc>
+    <loc>https://nicyyy.gitee.io/gallery/index.html</loc>
     
     <lastmod>2022-07-07</lastmod>
     
@@ -74,7 +74,7 @@
   </url>
   
   <url>
-    <loc>http://example.com/tag/index.html</loc>
+    <loc>https://nicyyy.gitee.io/tag/index.html</loc>
     
     <lastmod>2022-07-07</lastmod>
     
@@ -84,7 +84,7 @@
   
 
   <url>
-    <loc>http://example.com/</loc>
+    <loc>https://nicyyy.gitee.io/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
@@ -92,21 +92,21 @@
 
   
   <url>
-    <loc>http://example.com/tags/FPGA/</loc>
+    <loc>https://nicyyy.gitee.io/tags/FPGA/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
-    <loc>http://example.com/tags/%E5%9B%BE%E5%83%8F%E5%A4%84%E7%90%86/</loc>
+    <loc>https://nicyyy.gitee.io/tags/%E5%9B%BE%E5%83%8F%E5%A4%84%E7%90%86/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
-    <loc>http://example.com/tags/%E6%8E%A5%E5%8F%A3%E5%8D%8F%E8%AE%AE/</loc>
+    <loc>https://nicyyy.gitee.io/tags/%E6%8E%A5%E5%8F%A3%E5%8D%8F%E8%AE%AE/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
@@ -115,14 +115,14 @@
 
   
   <url>
-    <loc>http://example.com/categories/Project/</loc>
+    <loc>https://nicyyy.gitee.io/categories/Project/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
-    <loc>http://example.com/categories/Note/</loc>
+    <loc>https://nicyyy.gitee.io/categories/Note/</loc>
     <lastmod>2022-07-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
