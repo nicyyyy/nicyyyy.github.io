@@ -173,7 +173,8 @@
 <li>图像输入为360*640，输入输出包含行、场同步信号。</li>
 </ul>
 <h1 id="设计方案"><a href="#设计方案" class="headerlink" title="设计方案"></a>设计方案</h1><p>将像素点的插值分为两个步骤：先对行方向插值，再对列方向插值。即先将图像插值得到$360<em>1280$，再插值到$720</em>1280$</p>
-<p>在行方向的插值中，设插值后的图像像素点的坐标为y，则需要用到的原图中的坐标为$(y+0.5)&#x2F;2$向上和向下取整。例如坐标$y&#x3D;3，(3+0.5)&#x2F;2&#x3D;1.75$，那么用到的便是原图中y坐标为1和2的点，权重分别为(2-1.75)和(1.75-1)。通过下表坐标与系数的观察可以发现，除了第一个特殊位置外，其余系数均可以通过坐标奇偶性判断，即判断坐标寄存器最低位。列方向插值原理相同。</p>
+<p>在行方向的插值中，设插值后的图像像素点的坐标为y，则需要用到的原图中的坐标为$(y+0.5)/2$向上和向下取整。例如坐标$y=3，(3+0.5)/2=1.75$，那么用到的便是原图中y坐标为1和2的点，权重分别为(2-1.75)和(1.75-1)。通过下表坐标与系数的观察可以发现，除了第一个特殊位置外，其余系数均可以通过坐标奇偶性判断，即判断坐标寄存器最低位。列方向插值原理相同。</p>
+<div class="table-container">
 <table>
 <thead>
 <tr>
@@ -187,7 +188,8 @@
 <th>7</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td>用到原图坐标</td>
 <td>1</td>
 <td>1和2</td>
@@ -207,11 +209,12 @@
 <td>0.75,0.25</td>
 <td>0.25,0.75</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <p>在从内存中读取图像时，每一行图像结束后需要暂停640+1280个周期，在读取行像素和暂停时间的前640个周期中，完成行方向的插值，在读取行像素和暂停时间的前640+1280个周期中使用两行图像完成列方向的插值。</p>
 <p>系统原理图如图所示，包含row_buf、row_interplation、col_buf和col_interplation四个基本模块。<br><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/schematic.jpg"/></p>
-<h1 id="各模块设计"><a href="#各模块设计" class="headerlink" title="各模块设计"></a>各模块设计</h1><h2 id="row-buf模块："><a href="#row-buf模块：" class="headerlink" title="row_buf模块："></a>row_buf模块：</h2><p>输入图像根据一个宽度计数器产生地址，通过写端口存入行缓存ram中。进入每行后的暂停时间时，ram暂停写入。<br>用到的ram配置为：真双端口，深度640，数据宽度8bit，无输出寄存器。Port a用于缓存的数据写入，port b用于读出缓存数据。</p>
-<pre class="line-numbers language-lang-verilog" data-language="lang-verilog"><code class="language-lang-verilog">
+<h1 id="各模块设计"><a href="#各模块设计" class="headerlink" title="各模块设计"></a>各模块设计</h1><h2 id="row-buf模块："><a href="#row-buf模块：" class="headerlink" title="row_buf模块："></a>row_buf模块：</h2><p>输入图像根据一个宽度计数器产生地址，通过写端口存入行缓存ram中。进入每行后的暂停时间时，ram暂停写入。<br>用到的ram配置为：真双端口，深度640，数据宽度8bit，无输出寄存器。Port a用于缓存的数据写入，port b用于读出缓存数据。<br><pre class="line-numbers language-lang-verilog" data-language="lang-verilog"><code class="language-lang-verilog">
 module row_buf(
     input clk,
     input rst_n,
@@ -294,10 +297,12 @@ module row_buf(
 );
     
 endmodule
-<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
-
-<h2 id="row-interplation模块："><a href="#row-interplation模块：" class="headerlink" title="row_interplation模块："></a>row_interplation模块：</h2><p>根据插值后图像中的宽度寄存器生成读行缓存ram地址，根据寄存器数据的奇偶性判断插值权重。对于插值权重系数为0.75的像素，计算公式如下，等价于pixel*3后再除以4，同时对结果四舍五入。<br>$$<br>((pixel &lt;&lt; 1) + pixel + 2)&gt;&gt;2<br>$$<br>对于插值系数为0.25的像素，计算公式如下：<br>$$<br>(pixel + 2)&gt;&gt;2<br>$$</p>
-<pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre></p>
+<h2 id="row-interplation模块："><a href="#row-interplation模块：" class="headerlink" title="row_interplation模块："></a>row_interplation模块：</h2><p>根据插值后图像中的宽度寄存器生成读行缓存ram地址，根据寄存器数据的奇偶性判断插值权重。对于插值权重系数为0.75的像素，计算公式如下，等价于pixel*3后再除以4，同时对结果四舍五入。</p>
+<script type="math/tex; mode=display">
+((pixel << 1) + pixel + 2)>>2</script><p>对于插值系数为0.25的像素，计算公式如下：</p>
+<script type="math/tex; mode=display">
+(pixel + 2)>>2</script><pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
 <span class="token keyword">module</span> <span class="token function">row_interplation</span><span class="token punctuation">(</span>
     <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
     <span class="token keyword">input</span> rst_n<span class="token punctuation">,</span>
@@ -459,8 +464,7 @@ endmodule
 <span class="token keyword">endmodule</span>
 <span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 <h2 id="col-buf模块："><a href="#col-buf模块：" class="headerlink" title="col_buf模块："></a>col_buf模块：</h2><p>模块中使用了两个深度为1280的移位寄存器，用于缓存行插值模块输出的插值结果。在从内存中读取一行图像和之后暂停的前640个周期中，两个寄存器构成级联的移位寄存器，输出插值所用的像素值并完成一行图像的插值。由于相邻两行插值中用到的图像行坐标相同，因此在暂停时间的后1280个周期中，将两个缓存寄存器自身循环移位。如图所示。</p>
-<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/col缓存.png"/>
-
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/col缓存.png"/></p>
 <pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
 <span class="token keyword">module</span> <span class="token function">col_buf</span><span class="token punctuation">(</span>
     <span class="token keyword">input</span> clk<span class="token punctuation">,</span>
@@ -510,7 +514,6 @@ endmodule
     <span class="token keyword">end</span>
 <span class="token keyword">endmodule</span>
 <span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
-
 <h2 id="col-interplation模块："><a href="#col-interplation模块：" class="headerlink" title="col_interplation模块："></a>col_interplation模块：</h2><p>插值计算方式与行插值模块相同。</p>
 <pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog">
 <span class="token keyword">module</span> <span class="token function">col_interplation</span><span class="token punctuation">(</span>
@@ -763,7 +766,6 @@ endmodule
     <span class="token punctuation">)</span><span class="token punctuation">;</span>
 <span class="token keyword">endmodule</span>
 <span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
-
 <h1 id="仿真与结果"><a href="#仿真与结果" class="headerlink" title="仿真与结果"></a>仿真与结果</h1><p>将算法通过matlab实现，与matlab工具箱自带插值函数不同之处在于取整的方式。仿真结果与matlab工具箱函数的平均误差为0.3332，与算法的matlab版处理结果完全一致。</p>
 <center class="half">
     <img src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/插值前.png"/><img src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical2_bilinear_inter/插值后.png" />
@@ -889,10 +891,6 @@ endmodule
 	<span class="token keyword">end</span>
 <span class="token keyword">endmodule</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
 
-
-
-
-
             </div>
 
             <!-- Post Comments -->
@@ -992,9 +990,4 @@ $('.btn_click_load').click(function() {
 			
         </div>
     </div>
-</body>
-
-
-
- 	
-</html>
+<script async>window.onload=function(){var a=document.createElement('script'),b=document.getElementsByTagName('script')[0];a.type='text/javascript',a.async=!0,a.src='/sw-register.js?v='+Date.now(),b.parentNode.insertBefore(a,b)};</script></body></html>

@@ -171,8 +171,7 @@
                 <p><a target="_blank" rel="noopener" href="https://github.com/nicyyyy/FAST_Feature_Detect.git">代码GitHub链接</a></p>
 <h1 id="FAST特征点检测基本步骤"><a href="#FAST特征点检测基本步骤" class="headerlink" title="FAST特征点检测基本步骤"></a>FAST特征点检测基本步骤</h1><p>算法思想：如果一个像素与它邻域的像素差别较大（过亮或过暗）, 那它更可能是特征点。</p>
 <p>算法步骤：</p>
-<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/Bresenham1.png"/>
-
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/Bresenham1.png"/></p>
 <ul>
 <li><p>上图所示，一个以像素p为中心，半径为3的离散化Bresenham圆上，取16个邻域像素点point1-point16；</p>
 </li>
@@ -186,11 +185,9 @@
 </li>
 </ul>
 <h1 id="FAST特征点检测的rtl设计"><a href="#FAST特征点检测的rtl设计" class="headerlink" title="FAST特征点检测的rtl设计"></a>FAST特征点检测的rtl设计</h1><p>系统框图如下，可以分为Bresenham_16point_8bit模块，Get_Feature_point模块、Get_score模块和NMS模块。在FAST_top模块中对上述模块进行例化调用。</p>
-<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/FAST.png"/>
-
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/FAST.png"/></p>
 <h2 id="Bresenham-16point-8bit模块"><a href="#Bresenham-16point-8bit模块" class="headerlink" title="Bresenham_16point_8bit模块"></a>Bresenham_16point_8bit模块</h2><p>Bresenham_16point_8bit模块用于生成中心点和对应Bresenham邻域16点的灰度值补码。模块中设计了7个移位寄存器对输入像素点进行缓存，移位寄存器的深度为每列像素点个数*像素点数据位宽。邻域中的每个点在移位寄存器中的对应位置如下图：</p>
-<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/Bresenham.png"/>
-
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/Bresenham.png"/></p>
 <p>由于算法计算中包含对邻域点与中心点相减求绝对值的操作，因此需要将灰度值数据转换为补码，输出的point1-point16和center灰度值为9bit。其中point1-point16低8位与输入保持不变，最高位补零，center低8位按位取反加1，最高位补1。<br>当第一个像素点处于模板中心位置时，消耗的时钟周期为4*数据每列个数-3，因此需要将同步信号和数据有效信号延迟对应周期。</p>
 <h2 id="Get-Feature-poin模块"><a href="#Get-Feature-poin模块" class="headerlink" title="Get_Feature_poin模块"></a>Get_Feature_poin模块</h2><p>根据FAST特征点的定义判定一个检测点是否为特征点，需要依次查看周围16个点的连续9个点与中心的差是否大于阈值，在OpenCV中，作者使用的方法是优先判断上下左右四个点，即P1, P5, P9, P13，并且引入了阈值列表来判断。由于图像中特征点占像素点的少部分，该方法针对CPU的逐点计算可以起到非常好的优化效果，但是对于FPGA或GPU的并行计算，大量的if-else语句反而并不适用。<br>在Get_Feature_poin模块设计中，本模块采用了阈值标志位threshold_flag[15:0]作为判断依据。比较补码运算的结果与设定阈值判断标志位，并且将16种至少有连续9点大于阈值的情况存入寄存器，仅需比较寄存器与阈值标志位寄存器的与运算结果即可判断连续9点满足阈值的情况。</p>
 <ul>
@@ -204,16 +201,14 @@
 </li>
 </ul>
 <p>由于第二个周期中计算出的绝对值在第四个周期也被用到，因此需要将绝对值缓存一个周期。<br>为了判断像素点对应的坐标，需要设置两个计数器height_cnt和width_cnt。项目中数据为按列输入，要求height_cnt在时钟信号激励下计数，计数最大值为图像行数，width_cnt在height_cnt计数满时加1，最大值为图像列数。为了保证坐标计数的准确，需要与第四个周期的电路进行同步，因此这两个计数器需要在输入数据有效信号延迟3个周期后开始计数。</p>
-<h2 id="Get-score模块"><a href="#Get-score模块" class="headerlink" title="Get_score模块"></a>Get_score模块</h2><p>在OpenCV中，对特征点打分方法是改变阈值threshold，找到最大的一个threshold使该点恰好满足特征点判定的条件，即满足n个以上连续的点满足与中心的差大于该阈值。这个threshold即为该点的得分值score &#x3D; threshold。如果图像的像素是uint类型，score一定为圆周上某个与特征点差值的绝对值减一。该方法在OpenCV中实现需要遍历16个邻域点。</p>
+<h2 id="Get-score模块"><a href="#Get-score模块" class="headerlink" title="Get_score模块"></a>Get_score模块</h2><p>在OpenCV中，对特征点打分方法是改变阈值threshold，找到最大的一个threshold使该点恰好满足特征点判定的条件，即满足n个以上连续的点满足与中心的差大于该阈值。这个threshold即为该点的得分值score = threshold。如果图像的像素是uint类型，score一定为圆周上某个与特征点差值的绝对值减一。该方法在OpenCV中实现需要遍历16个邻域点。</p>
 <p> 在Get_score模块设计中，采用了大量并行计算来提高速度。由于score值一定为邻域点与中心点之差中的某一个，因此第一步将每个点与中心的的差作为阈值，按照Get_Feature_poin模块的方法判断是否满足特征点条件，并且设置一个标志寄存器S[15:0]，满足条件对应位置1反之置0。第二步需要在这些能够满足条件的点中找出最大值即为score，本模块设计了如图所示的比较结构，对这些差值乘以标志位后两两比较。</p>
 <p>对于非特征点和边界点，score的值都为0。</p>
-<img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/cmper.png"/>
-
+<p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/cmper.png"/></p>
 <h2 id="NMS模块"><a href="#NMS模块" class="headerlink" title="NMS模块"></a>NMS模块</h2><p>NMS模块实现对特征点进行非极大值抑制。在本设计中取3*3区域内的最大值作为非极大值抑制的输出。</p>
 <p> 首先使用matrix_3x3_11bit模块提取3<em>3模板。该模块包含3个深度为图像行数</em>11bit的首尾相连的寄存器，对同步信号和有效信号的延迟为2*图像行数-1。</p>
 <p> 当中心score值大于8个邻域时，输出xy坐标，以及一个坐标有效信号。坐标计数器设计同get_score模块。</p>
-<h2 id="test-bench与仿真结果"><a href="#test-bench与仿真结果" class="headerlink" title="test bench与仿真结果"></a>test bench与仿真结果</h2><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/cmp.png"/>
-
+<h2 id="test-bench与仿真结果"><a href="#test-bench与仿真结果" class="headerlink" title="test bench与仿真结果"></a>test bench与仿真结果</h2><p><img align=center src="https://nicy-gallery.oss-cn-beijing.aliyuncs.com/img/artical1-FAST-Feature-detect/cmp.png"/></p>
 <p> 输入图像来自读取bin文件生成数据流，输出xy坐标和每个像素点score值到bin文件。测试结果对比matlab计算结果，计算的特征点数量、坐标与matlab结果绝大部分一致。<br> <pre class="line-numbers language-verilog" data-language="verilog"><code class="language-verilog"><span class="token constant">`timescale</span> <span class="token number">1</span>ns <span class="token operator">/</span> <span class="token number">1</span>ns
 <span class="token keyword">module</span> <span class="token function">tb_FAST</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
 
@@ -505,9 +500,4 @@ $('.btn_click_load').click(function() {
 			
         </div>
     </div>
-</body>
-
-
-
- 	
-</html>
+<script async>window.onload=function(){var a=document.createElement('script'),b=document.getElementsByTagName('script')[0];a.type='text/javascript',a.async=!0,a.src='/sw-register.js?v='+Date.now(),b.parentNode.insertBefore(a,b)};</script></body></html>
