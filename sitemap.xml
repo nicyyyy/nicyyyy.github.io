@@ -2,6 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://nicyyy.gitee.io/about/index.html</loc>
+    
+    <lastmod>2022-07-19</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://nicyyy.gitee.io/2022/07/12/artical4-AXI2VGA/</loc>
     
     <lastmod>2022-07-15</lastmod>
@@ -14,15 +23,6 @@
     <loc>https://nicyyy.gitee.io/2022/07/12/artical3-CLAHE/</loc>
     
     <lastmod>2022-07-14</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://nicyyy.gitee.io/about/index.html</loc>
-    
-    <lastmod>2022-07-12</lastmod>
     
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -85,7 +85,7 @@
 
   <url>
     <loc>https://nicyyy.gitee.io/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
@@ -93,21 +93,21 @@
   
   <url>
     <loc>https://nicyyy.gitee.io/tags/FPGA/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
     <loc>https://nicyyy.gitee.io/tags/%E5%9B%BE%E5%83%8F%E5%A4%84%E7%90%86/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
     <loc>https://nicyyy.gitee.io/tags/%E6%8E%A5%E5%8F%A3%E5%8D%8F%E8%AE%AE/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
@@ -116,14 +116,14 @@
   
   <url>
     <loc>https://nicyyy.gitee.io/categories/Project/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
     <loc>https://nicyyy.gitee.io/categories/Note/</loc>
-    <lastmod>2022-07-17</lastmod>
+    <lastmod>2022-07-19</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>

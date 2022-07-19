@@ -1,6 +1,6 @@
+https://nicyyy.gitee.io/about/index.html
 https://nicyyy.gitee.io/2022/07/12/artical4-AXI2VGA/
 https://nicyyy.gitee.io/2022/07/12/artical3-CLAHE/
-https://nicyyy.gitee.io/about/index.html
 https://nicyyy.gitee.io/academy/index.html
 https://nicyyy.gitee.io/2022/07/10/artical2_bilinear_inter/
 https://nicyyy.gitee.io/2022/07/10/artical1-FAST-Feature-detect/
