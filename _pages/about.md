@@ -23,6 +23,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 - **Compute in Memory**
   
 # 🔥 News
+- *2025.06* I recieved President’s Fellowship of the Chinese Academy of Sciences.
 
 <span class='anchor' id='-xl'></span>
 
@@ -34,7 +35,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 <span class='anchor' id='-lwzl'></span>
 
 # 📝 Publications
-<a href='https://scholar.google.com/citations?user=eUAofcwAAAAJ'><img src="https://img.shields.io/endpoint?url={{ url | url_encode }}&logo=Google%20Scholar&labelColor=f6f6f6&color=9cf&style=flat&label=Citation"></a>
+<a href='https://scholar.google.com/citations?user=eUAofcwAAAAJ'><img src="https://img.shields.io/endpoint?url={{ url | url_encode }}&logo=Google%20Scholar&labelColor=f6f6f6&color=9cf&style=flat&label=Citations"></a>
 
 
 - `Q. Yang`, X. Wang, Y. Zhou, Q. Li and S. Qiao, "Hardware Friendly Transformer Optimization with Dynamic Attention Matrix Fusion," in *2025 IEEE International Symposium on Circuits and Systems*.
@@ -54,7 +55,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 <span class='anchor' id='-ryjx'></span>
 
 # 🏅 Honors and Awards
-- *2025.05* President’s Fellowship of the Chinese Academy of Sciences (Top 1%)
+- *2025.06* President’s Fellowship of the Chinese Academy of Sciences (Top 1%)
 - *2025.01* Honorary Scholarship of the Institute of Microelectronics, Chinese Academy of Sciences, Special Prize (Top 1%)  
 - *2020.12* HollySys Scholarship (Top 1%)
 
