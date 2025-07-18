@@ -26,7 +26,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 
 <span class='anchor' id='-xl'></span>
 
-# 🎓 Education
+# 🎓 Educations
 - *2025.09 - Present*, <img class="png" src="/images/hku_logo.png" width="23pt"> The University of Hong Kong, Department of Electrical and Electronic Engineering, Ph.D student 
 - *2022.09 - 2025.06*, <img class="svg" src="/images/ucas_logo.svg" width="23pt"> University of Chinese Academy of Sciences, School of Integrated Circuits, M.S. of Engineering
 - *2018.09 - 2022.06*, <img class="svg" src="/images/buct_logo.svg" width="20pt"> Beijing University of Chemical Technology, Department of Information Science and Technology, B.S. of Engineering
@@ -39,7 +39,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 
 - `Q. Yang`, X. Wang, Y. Zhou, Q. Li and S. Qiao, "Hardware Friendly Transformer Optimization with Dynamic Attention Matrix Fusion," in *2025 IEEE International Symposium on Circuits and Systems*.
 
-- `Q. Yang`, X. Wang, L. Chen, Y. Zhou and S. Qiao, "CS-TTD: Triplet Transformer for Compressive Hyperspectral Target Detection," in *IEEE Transactions on Geoscience and Remote Sensing*.*(JCR Q1, IF 7.5)
+- `Q. Yang`, X. Wang, L. Chen, Y. Zhou and S. Qiao, "CS-TTD: Triplet Transformer for Compressive Hyperspectral Target Detection," in *IEEE Transactions on Geoscience and Remote Sensing*.(JCR Q1, IF 7.5)
 
 - `Q. Yang`, X. Wang, D. Wang, B. Yu, Y. Zhou, and S. Qiao, "Compressive Hyperspectral Target Detection With Restricted Distribution Property," in *IEEE Transactions on Geoscience and Remote Sensing*. (JCR Q1, IF 7.5)
 
@@ -65,7 +65,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 
 <span class='anchor' id='-gzsx'></span>
 
-# 💻 Internship
+# 💻 Internships
 <!-- - *2018.05 - 2020.02*, 重庆长江轴承股份有限公司, 重庆
 - *2020.11.25 - 2020.12.02*, 湖北新冶钢有限公司, 湖北黄石
 - *2017.6 - 2021.1*, 制造装备数字化国家工程研究中心, 湖北武汉 -->
