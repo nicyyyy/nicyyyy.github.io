@@ -17,13 +17,13 @@ redirect_from:
 
 <span class='anchor' id='about-me'></span>
 
-I am a Ph.D. Student at the Department of Electrical and Electronic Engineering, the University of Hong Kong (HKU), supervised by [Prof. Ngai WONG](https://www.eee.hku.hk/~nwong/) and [Prof. Can Li](https://canlab.hku.hk/people-can.html). My current research areas includes:
-- **Hardware-Software Co-Design** 
+I am a Ph.D. Student at the Department of Electrical and Electronic Engineering, the University of Hong Kong (HKU), supervised by [Prof. Ngai WONG](https://www.eee.hku.hk/~nwong/) and [Prof. Can Li](https://canlab.hku.hk/people-can.html). My current research areas includes: 
 - **Efficient LLMs** 
 - **Compute in Memory**
+- **Hardware-Software Co-Design**
   
 # 🔥 News
-- *2025.06* I recieved President’s Fellowship of the Chinese Academy of Sciences.
+- *2025.06* I recieved President’s Fellowship of the Chinese Academy of Sciences
 
 <span class='anchor' id='-xl'></span>
 
@@ -48,10 +48,6 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 
 
 
-
-
-
-
 <span class='anchor' id='-ryjx'></span>
 
 # 🏅 Honors and Awards
@@ -62,7 +58,7 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 <span class='anchor' id='-xshy'></span>
 
 # 🏛️ Conference and Talks
-- *2025.05*, IEEE International Symposium on Circuits and Systems, London, Lecture Presentation. 
+- *2025.05*, IEEE International Symposium on Circuits and Systems, London, Lecture Presentation
 
 <span class='anchor' id='-gzsx'></span>
 
