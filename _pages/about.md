@@ -22,18 +22,18 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 - **Efficient LLMs** 
 - **Compute in Memory**
   
-
+# 🔥 News
 
 <span class='anchor' id='-xl'></span>
 
 # 🎓 Education
-- *2025.09 - Present*, <img class="png" src="/images/hku_logo.png" width="23pt"> The University of Hong Kong, Department of Electrical and Electronic Engineering, Hong Kong, Ph.D student 
-- *2022.09 - 2025.06*, <img class="svg" src="/images/ucas_logo.svg" width="23pt"> University of Chinese Academy of Sciences, School of Integrated Circuits, Beijing, M.S. of Engineering
-- *2018.09 - 2022.06*, <img class="svg" src="/images/buct_logo.svg" width="20pt"> Beijing University of Chemical Technology, Department of Information Science and Technology, Beijing, B.S. of Engineering
+- *2025.09 - Present*, <img class="png" src="/images/hku_logo.png" width="23pt"> The University of Hong Kong, Department of Electrical and Electronic Engineering, Ph.D student 
+- *2022.09 - 2025.06*, <img class="svg" src="/images/ucas_logo.svg" width="23pt"> University of Chinese Academy of Sciences, School of Integrated Circuits, M.S. of Engineering
+- *2018.09 - 2022.06*, <img class="svg" src="/images/buct_logo.svg" width="20pt"> Beijing University of Chemical Technology, Department of Information Science and Technology, B.S. of Engineering
  
 <span class='anchor' id='-lwzl'></span>
 
-# 📝 Publication
+# 📝 Publications
 <a href='https://scholar.google.com/citations?user=eUAofcwAAAAJ'><img src="https://img.shields.io/endpoint?url={{ url | url_encode }}&logo=Google%20Scholar&labelColor=f6f6f6&color=9cf&style=flat&label=引用"></a>
 
 
