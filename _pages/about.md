@@ -17,7 +17,7 @@ redirect_from:
 
 <span class='anchor' id='about-me'></span>
 
-I am a Ph.D. Student at the Department of Electrical and Electronic Engineering, the University of Hong Kong (HKU), supervised by [Prof. Ngai WONG](https://www.eee.hku.hk/~nwong/) and [Prof. Can Li](https://canlab.hku.hk/people-can.html). My current main research areas includes:
+I am a Ph.D. Student at the Department of Electrical and Electronic Engineering, the University of Hong Kong (HKU), supervised by [Prof. Ngai WONG](https://www.eee.hku.hk/~nwong/) and [Prof. Can Li](https://canlab.hku.hk/people-can.html). My current research areas includes:
 - **Hardware-Software Co-Design** 
 - **Efficient LLMs** 
 - **Compute in Memory**
