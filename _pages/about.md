@@ -28,8 +28,8 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 
 # 🎓 Education
 - *2025.09 - Present*, <img class="png" src="/images/hku_logo.png" width="23pt"> The University of Hong Kong, Department of Electrical and Electronic Engineering, Hong Kong, Ph.D student. 
-- *2022.09 - 2025.06*, <img class="svg" src="/images/ucas_logo.svg" width="23pt"> University of Chinese Academy of Sciences, School of Integrated Circuits, Beijing, Master of Engineering. 
-- *2018.09 - 2022.06*, <img class="svg" src="/images/buct_logo.svg" width="20pt"> Beijing University of Chemical Technology, Department of Information Science and Technology, Beijing, Bachelor of Engineering
+- *2022.09 - 2025.06*, <img class="svg" src="/images/ucas_logo.svg" width="23pt"> University of Chinese Academy of Sciences, School of Integrated Circuits, Beijing, M.S. of Engineering. 
+- *2018.09 - 2022.06*, <img class="svg" src="/images/buct_logo.svg" width="20pt"> Beijing University of Chemical Technology, Department of Information Science and Technology, Beijing, B.S. of Engineering
  
 <span class='anchor' id='-lwzl'></span>
 
