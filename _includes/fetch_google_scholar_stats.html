@@ -1,19 +1,82 @@
 <script>
     $(document).ready(function () {
+        var publications = document.getElementById('scholar-publications');
+        var status = document.getElementById('scholar-publications-status');
+        // Read the latest saved crawl first; use the CDN only as a fallback.
+        var sources = ['https://raw.githubusercontent.com/{{ site.repository }}/google-scholar-stats/gs_data.json'];
         {% if site.google_scholar_stats_use_cdn %}
-        var gsDataBaseUrl = 'https://cdn.jsdelivr.net/gh/{{ site.repository }}@'
-        {% else %}
-        var gsDataBaseUrl = 'https://raw.githubusercontent.com/{{ site.repository }}/'
+        sources.push('https://cdn.jsdelivr.net/gh/{{ site.repository }}@google-scholar-stats/gs_data.json');
         {% endif %}
-        $.getJSON(gsDataBaseUrl + "google-scholar-stats/gs_data.json", function (data) {
-            var totalCitation = data['citedby']
-            document.getElementById('total_cit').innerHTML = totalCitation;
-            var citationEles = document.getElementsByClassName('show_paper_citations')
-            Array.prototype.forEach.call(citationEles, element => {
-                var paperId = element.getAttribute('data')
-                var numCitations = data['publications'][paperId]['num_citations']
-                element.innerHTML = '| Citations: ' + numCitations;
+
+        function render(data) {
+            if (!data || !data.publications || typeof data.publications !== 'object') return false;
+            var papers = Object.keys(data.publications).map(function (id) {
+                return {id: id, paper: data.publications[id]};
+            }).filter(function (entry) {
+                return entry.paper && entry.paper.bib && typeof entry.paper.bib.title === 'string' && entry.paper.bib.title.trim();
             });
-        });
-    })
+            // Keep the saved HTML list if a crawl is empty or malformed.
+            if (!papers.length) return false;
+            papers.sort(function (a, b) {
+                return (parseInt(b.paper.bib.pub_year, 10) || 0) - (parseInt(a.paper.bib.pub_year, 10) || 0) ||
+                    a.paper.bib.title.localeCompare(b.paper.bib.title);
+            });
+
+            if (publications) {
+                var list = document.createElement('ul');
+                papers.forEach(function (entry) {
+                    var paper = entry.paper;
+                    var bib = paper.bib;
+                    var item = document.createElement('li');
+                    var paragraph = document.createElement('p');
+                    var title = document.createElement('a');
+                    var pubId = paper.author_pub_id || entry.id;
+                    title.href = 'https://scholar.google.com/citations?view_op=view_citation&user=' +
+                        encodeURIComponent(data.scholar_id || pubId.split(':')[0]) + '&citation_for_view=' + encodeURIComponent(pubId);
+                    title.textContent = bib.title;
+                    paragraph.appendChild(title);
+                    if (bib.author) paragraph.appendChild(document.createTextNode('. ' + bib.author));
+                    var venue = bib.citation || bib.journal || bib.conference || '';
+                    if (venue) {
+                        var citation = document.createElement('em');
+                        citation.textContent = venue;
+                        paragraph.appendChild(document.createTextNode('. '));
+                        paragraph.appendChild(citation);
+                    }
+                    if (bib.pub_year && venue.indexOf(String(bib.pub_year)) === -1) {
+                        paragraph.appendChild(document.createTextNode(' (' + bib.pub_year + ')'));
+                    }
+                    if (Number.isFinite(paper.num_citations) && paper.num_citations >= 0) {
+                        paragraph.appendChild(document.createTextNode(' · Citations: ' + paper.num_citations));
+                    }
+                    item.appendChild(paragraph);
+                    list.appendChild(item);
+                });
+                publications.replaceChildren(list);
+            }
+
+            var total = document.getElementById('total_cit');
+            if (total && Number.isFinite(data.citedby)) total.textContent = data.citedby;
+            Array.prototype.forEach.call(document.getElementsByClassName('show_paper_citations'), function (element) {
+                var paper = data.publications[element.getAttribute('data')];
+                if (paper && Number.isFinite(paper.num_citations)) element.textContent = '| Citations: ' + paper.num_citations;
+            });
+            if (status) {
+                var updated = String(data.updated || '').match(/^\d{4}-\d{2}-\d{2}/);
+                status.textContent = 'Synced from Google Scholar' + (updated ? ' · Updated ' + updated[0] : '') + '.';
+            }
+            return true;
+        }
+
+        function load(index) {
+            if (index >= sources.length) {
+                if (status) status.textContent = 'Showing saved publications. The full list is available on Google Scholar.';
+                return;
+            }
+            $.ajax({url: sources[index], dataType: 'json', timeout: 12000})
+                .done(function (data) { if (!render(data)) load(index + 1); })
+                .fail(function () { load(index + 1); });
+        }
+        load(0);
+    });
 </script>
