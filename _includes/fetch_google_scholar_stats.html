@@ -18,7 +18,8 @@
             // Keep the saved HTML list if a crawl is empty or malformed.
             if (!papers.length) return false;
             papers.sort(function (a, b) {
-                return (parseInt(b.paper.bib.pub_year, 10) || 0) - (parseInt(a.paper.bib.pub_year, 10) || 0) ||
+                return (Number(b.paper.num_citations) || 0) - (Number(a.paper.num_citations) || 0) ||
+                    (parseInt(b.paper.bib.pub_year, 10) || 0) - (parseInt(a.paper.bib.pub_year, 10) || 0) ||
                     a.paper.bib.title.localeCompare(b.paper.bib.title);
             });
 
