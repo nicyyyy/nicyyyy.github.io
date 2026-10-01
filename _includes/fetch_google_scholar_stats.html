@@ -29,10 +29,7 @@
                     var bib = paper.bib;
                     var item = document.createElement('li');
                     var paragraph = document.createElement('p');
-                    var title = document.createElement('a');
-                    var pubId = paper.author_pub_id || entry.id;
-                    title.href = 'https://scholar.google.com/citations?view_op=view_citation&user=' +
-                        encodeURIComponent(data.scholar_id || pubId.split(':')[0]) + '&citation_for_view=' + encodeURIComponent(pubId);
+                    var title = document.createElement('span');
                     title.textContent = bib.title;
                     paragraph.appendChild(title);
                     if (bib.author) paragraph.appendChild(document.createTextNode('. ' + bib.author));
@@ -46,9 +43,6 @@
                     if (bib.pub_year && venue.indexOf(String(bib.pub_year)) === -1) {
                         paragraph.appendChild(document.createTextNode(' (' + bib.pub_year + ')'));
                     }
-                    if (Number.isFinite(paper.num_citations) && paper.num_citations >= 0) {
-                        paragraph.appendChild(document.createTextNode(' · Citations: ' + paper.num_citations));
-                    }
                     item.appendChild(paragraph);
                     list.appendChild(item);
                 });
@@ -57,10 +51,6 @@
 
             var total = document.getElementById('total_cit');
             if (total && Number.isFinite(data.citedby)) total.textContent = data.citedby;
-            Array.prototype.forEach.call(document.getElementsByClassName('show_paper_citations'), function (element) {
-                var paper = data.publications[element.getAttribute('data')];
-                if (paper && Number.isFinite(paper.num_citations)) element.textContent = '| Citations: ' + paper.num_citations;
-            });
             if (status) {
                 var updated = String(data.updated || '').match(/^\d{4}-\d{2}-\d{2}/);
                 status.textContent = 'Synced from Google Scholar' + (updated ? ' · Updated ' + updated[0] : '') + '.';
