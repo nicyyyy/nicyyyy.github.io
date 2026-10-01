@@ -1,7 +1,6 @@
 <script>
     $(document).ready(function () {
         var publications = document.getElementById('scholar-publications');
-        var status = document.getElementById('scholar-publications-status');
         // Read the latest saved crawl first; use the CDN only as a fallback.
         var sources = ['https://raw.githubusercontent.com/{{ site.repository }}/google-scholar-stats/gs_data.json'];
         {% if site.google_scholar_stats_use_cdn %}
@@ -52,16 +51,11 @@
 
             var total = document.getElementById('total_cit');
             if (total && Number.isFinite(data.citedby)) total.textContent = data.citedby;
-            if (status) {
-                var updated = String(data.updated || '').match(/^\d{4}-\d{2}-\d{2}/);
-                status.textContent = 'Synced from Google Scholar' + (updated ? ' · Updated ' + updated[0] : '') + '.';
-            }
             return true;
         }
 
         function load(index) {
             if (index >= sources.length) {
-                if (status) status.textContent = 'Showing saved publications. The full list is available on Google Scholar.';
                 return;
             }
             $.ajax({url: sources[index], dataType: 'json', timeout: 12000})
