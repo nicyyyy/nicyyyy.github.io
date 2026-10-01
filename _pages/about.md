@@ -52,8 +52,6 @@ I am a Ph.D. Student at the Department of Electrical and Electronic Engineering
 - J. Shao, `Q. Yang`, C. Luo, R. Li, Y. Zhou and F. Zhang, "Vessel Detection From Nighttime Remote Sensing Imagery Based on Deep Learning," in *IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing*. (JCR Q1, IF 4.7)
 
 </div>
-<p id="scholar-publications-status" class="page__meta" role="status"></p>
-
 <span class='anchor' id='-ryjx'></span>
 
 # 🏅 Honors and Awards
